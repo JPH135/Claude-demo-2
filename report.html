@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>European Fintech Investment Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root { --accent: #6366f1; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; }
+    .stage-seed     { background:#7c3aed22; color:#a78bfa; border:1px solid #7c3aed44; }
+    .stage-a        { background:#2563eb22; color:#93c5fd; border:1px solid #2563eb44; }
+    .stage-b        { background:#059669'22; color:#6ee7b7; border:1px solid #05966944; }
+    .stage-c        { background:#d9770622; color:#fcd34d; border:1px solid #d9770644; }
+    .stage-growth   { background:#dc262622; color:#fca5a5; border:1px solid #dc262644; }
+    .stage-pe       { background:#71717a22; color:#d4d4d8; border:1px solid #71717a44; }
+    .stage-other    { background:#0f172a;   color:#94a3b8; border:1px solid #334155;  }
+    .detail-panel   { display:none; }
+    .detail-panel.open { display:block; }
+    input, select   { background:#0f172a; border:1px solid #334155; color:#e2e8f0; border-radius:6px; padding:6px 10px; }
+    input:focus, select:focus { outline: 2px solid #6366f1; border-color:transparent; }
+    th { cursor:pointer; user-select:none; }
+    th:hover { color:#a5b4fc; }
+    tr.inv-row:hover { background:#1e3a5f33; cursor:pointer; }
+    .chip { background:#1e293b; border:1px solid #334155; border-radius:6px; padding:2px 7px; font-size:11px; color:#94a3b8; display:inline-block; margin:2px; }
+    .metric-badge { background:#1e3a5f; border:1px solid #2563eb44; border-radius:6px; padding:3px 8px; font-size:11px; color:#93c5fd; display:inline-block; margin:2px; }
+    .stat-card { text-align:center; padding:20px; }
+    .stat-num  { font-size:2.2rem; font-weight:700; color:#a5b4fc; }
+    .stat-lbl  { font-size:0.8rem; color:#64748b; margin-top:4px; letter-spacing:.05em; text-transform:uppercase; }
+    #search-box { width:220px; }
+    .sort-asc::after  { content:' ↑'; color:#6366f1; }
+    .sort-desc::after { content:' ↓'; color:#6366f1; }
+  </style>
+</head>
+<body class="p-4 md:p-8">
+
+<!-- Header -->
+<div class="mb-8">
+  <h1 class="text-3xl font-bold text-white mb-1">
+    🇪🇺 European Fintech Investment Tracker
+  </h1>
+  <p class="text-slate-400 text-sm">
+    Powered by Claude Opus 4.6 · Last updated: <span id="last-updated">20 Mar 2026 17:40 UTC</span>
+  </p>
+</div>
+
+<!-- Summary Stats -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  <div class="card stat-card">
+    <div class="stat-num" id="s-total">18</div>
+    <div class="stat-lbl">Investment Rounds</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-num" id="s-capital">€5.2B</div>
+    <div class="stat-lbl">Total Capital (EUR)</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-num" id="s-countries">5</div>
+    <div class="stat-lbl">Countries</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-num" id="s-visible">–</div>
+    <div class="stat-lbl">Matching Filters</div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+  <div class="card p-4">
+    <h3 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wide">By Stage</h3>
+    <canvas id="chart-stage" height="220"></canvas>
+  </div>
+  <div class="card p-4">
+    <h3 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wide">By Country</h3>
+    <canvas id="chart-country" height="220"></canvas>
+  </div>
+  <div class="card p-4">
+    <h3 class="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wide">By Tech Focus</h3>
+    <canvas id="chart-tech" height="220"></canvas>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card p-4 mb-4 flex flex-wrap gap-3 items-end">
+  <div>
+    <label class="block text-xs text-slate-400 mb-1">Search</label>
+    <input id="search-box" type="text" placeholder="Company, investor…" oninput="applyFilters()" />
+  </div>
+  <div>
+    <label class="block text-xs text-slate-400 mb-1">Stage</label>
+    <select id="f-stage" onchange="applyFilters()"><option value="">All</option></select>
+  </div>
+  <div>
+    <label class="block text-xs text-slate-400 mb-1">Round Type</label>
+    <select id="f-type" onchange="applyFilters()"><option value="">All</option></select>
+  </div>
+  <div>
+    <label class="block text-xs text-slate-400 mb-1">Country</label>
+    <select id="f-country" onchange="applyFilters()"><option value="">All</option></select>
+  </div>
+  <div>
+    <label class="block text-xs text-slate-400 mb-1">Tech Focus</label>
+    <select id="f-tech" onchange="applyFilters()"><option value="">All</option></select>
+  </div>
+  <button onclick="clearFilters()"
+    class="px-3 py-1.5 text-sm rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition">
+    Clear
+  </button>
+</div>
+
+<!-- Table -->
+<div class="card overflow-hidden mb-8">
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wide">
+          <th class="text-left px-4 py-3" onclick="sortTable('company_name')">Company</th>
+          <th class="text-left px-4 py-3" onclick="sortTable('country')">Country</th>
+          <th class="text-left px-4 py-3" onclick="sortTable('stage')">Stage</th>
+          <th class="text-left px-4 py-3" onclick="sortTable('round_type')">Type</th>
+          <th class="text-right px-4 py-3" onclick="sortTable('amount_raised_eur_millions')">Raised (EUR)</th>
+          <th class="text-right px-4 py-3" onclick="sortTable('post_money_valuation_eur_m')">Valuation</th>
+          <th class="text-left px-4 py-3" onclick="sortTable('deal_date')">Date</th>
+          <th class="text-left px-4 py-3">Lead Investor(s)</th>
+          <th class="text-left px-4 py-3">Focus</th>
+        </tr>
+      </thead>
+      <tbody id="inv-body"></tbody>
+    </table>
+  </div>
+  <div id="no-results" class="hidden text-center py-12 text-slate-500">
+    No investments match the current filters.
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div id="modal-overlay"
+     class="fixed inset-0 bg-black/60 flex items-start justify-center pt-10 z-50 hidden"
+     onclick="closeModal(event)">
+  <div class="card w-full max-w-3xl mx-4 mb-10 overflow-y-auto max-h-[85vh]" onclick="event.stopPropagation()">
+    <div class="flex justify-between items-start p-5 border-b border-slate-700">
+      <div>
+        <h2 id="modal-company" class="text-xl font-bold text-white"></h2>
+        <p id="modal-meta" class="text-sm text-slate-400 mt-0.5"></p>
+      </div>
+      <button onclick="closeModal()" class="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+    </div>
+    <div class="p-5 space-y-5">
+      <div>
+        <h3 class="text-xs uppercase tracking-wide text-slate-500 mb-2">Company Summary</h3>
+        <p id="modal-summary" class="text-slate-300 leading-relaxed"></p>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Amount Raised</div>
+          <div id="modal-amount" class="text-white font-semibold text-lg"></div>
+          <div id="modal-amount-orig" class="text-slate-400 text-xs"></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Valuation</div>
+          <div id="modal-valuation" class="text-white font-semibold"></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Stage / Type</div>
+          <div id="modal-stage" class="text-white font-semibold"></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Location</div>
+          <div id="modal-location" class="text-white"></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Customer Segment</div>
+          <div id="modal-segment" class="text-white"></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-1">Founded</div>
+          <div id="modal-founded" class="text-white"></div>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-xs uppercase tracking-wide text-slate-500 mb-2">Investors</h3>
+        <div class="space-y-1">
+          <div id="modal-lead-inv" class="text-sm text-slate-300"></div>
+          <div id="modal-new-inv" class="text-sm text-slate-300"></div>
+          <div id="modal-exist-inv" class="text-sm text-slate-300"></div>
+        </div>
+      </div>
+      <div id="modal-metrics-section">
+        <h3 class="text-xs uppercase tracking-wide text-slate-500 mb-2">Key Metrics</h3>
+        <div id="modal-metrics" class="flex flex-wrap gap-1"></div>
+      </div>
+      <div id="modal-focus-section">
+        <h3 class="text-xs uppercase tracking-wide text-slate-500 mb-2">Technology Focus</h3>
+        <div id="modal-focus" class="flex flex-wrap gap-1"></div>
+      </div>
+      <div id="modal-funds-section">
+        <h3 class="text-xs uppercase tracking-wide text-slate-500 mb-2">Use of Funds</h3>
+        <p id="modal-funds" class="text-slate-300 text-sm"></p>
+      </div>
+      <div id="modal-notable-section">
+        <h3 class="text-xs uppercase tracking-wide text-slate-500 mb-2">Notable Details</h3>
+        <p id="modal-notable" class="text-slate-300 text-sm"></p>
+      </div>
+      <div class="border-t border-slate-700 pt-4">
+        <a id="modal-source" href="#" target="_blank" rel="noopener"
+           class="text-indigo-400 hover:text-indigo-300 text-sm underline">
+          Read Original Article ↗
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Data ─────────────────────────────────────────────────────────────────────
+const ALL_DATA = [{"id": 18, "article_id": 18, "company_name": "Banxware", "company_summary": "Embedded lending-as-a-service platform connecting digital marketplaces to SME business loans (€1,000–€5M). Integrated with 40+ platforms including Wolt, Glovo, and Bolt across 30 European markets.", "founding_year": null, "country": "Germany", "city": "Berlin", "technology_focus": ["lending", "embedded finance", "SME finance"], "customer_segment": "B2B", "stage": "Strategic Investment", "round_type": "Venture Capital", "deal_date": "2025-06", "amount_raised_original": "€10,000,000", "amount_raised_eur_millions": 10.0, "amount_raised_usd_millions": 10.9, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["UniCredit"], "new_investors": ["UniCredit"], "existing_investors": [], "key_metrics": {"platforms": "40+"}, "use_of_funds": "Expand embedded lending across Europe", "notable_details": "Strategic investment from UniCredit. Partners with HypoVereinsbank for loan origination. Integrated with gig economy platforms.", "source_url": "https://www.unicreditgroup.eu/en/press-media/press-releases/2025/june/banxware-receives-strategic-investment-of-eur-10-million-from-un.html", "analyzed_at": "2026-03-20T17:40:14.947046+00:00", "article_title": "Banxware raises €10,000,000", "article_url": "https://www.unicreditgroup.eu/en/press-media/press-releases/2025/june/banxware-receives-strategic-investment-of-eur-10-million-from-un.html", "article_source": "Web Research", "published_at": "2025-06"}, {"id": 17, "article_id": 17, "company_name": "Seyna", "company_summary": "French insurtech and first independent ACPR-approved P&C insurer in France since 1983. Distributes customized insurance products through 100+ brokers and MGAs. Protects nearly 2 million policyholders.", "founding_year": null, "country": "France", "city": "Paris", "technology_focus": ["insurance (insurtech)"], "customer_segment": "B2B", "stage": "Growth", "round_type": "Venture Capital", "deal_date": "2025-09", "amount_raised_original": "€10,000,000", "amount_raised_eur_millions": 10.0, "amount_raised_usd_millions": 10.9, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["115K / La Banque Postale"], "new_investors": ["115K / La Banque Postale"], "existing_investors": ["White Star Capital", "Elaia"], "key_metrics": {"policyholders": "2M", "GWP_target": "€125M+"}, "use_of_funds": "Scale insurance distribution across 5 countries", "notable_details": "First independent ACPR-approved P&C insurer in France since 1983. Strategic backing from La Banque Postale.", "source_url": "https://www.eu-startups.com/2025/09/french-insurtech-startup-seyna-raises-e10-million-as-it-expects-to-surpass-e125-million-in-premiums-in-2025/", "analyzed_at": "2026-03-20T17:40:14.943023+00:00", "article_title": "Seyna raises €10,000,000", "article_url": "https://www.eu-startups.com/2025/09/french-insurtech-startup-seyna-raises-e10-million-as-it-expects-to-surpass-e125-million-in-premiums-in-2025/", "article_source": "Web Research", "published_at": "2025-09"}, {"id": 16, "article_id": 16, "company_name": "Kertos", "company_summary": "AI-powered compliance automation platform for European SMEs and scaleups. Covers ISO 27001, ISO 42001, NIS2, DORA, GDPR, and TISAX. Automates evidence collection, vendor checks, and policy drafting.", "founding_year": null, "country": "Germany", "city": "Munich", "technology_focus": ["regtech", "data analytics"], "customer_segment": "B2B", "stage": "Series A", "round_type": "Venture Capital", "deal_date": "2025-09", "amount_raised_original": "€14,000,000", "amount_raised_eur_millions": 14.0, "amount_raised_usd_millions": 15.2, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["Portage"], "new_investors": ["Portage", "Pilabs", "Redstone", "10x Founders", "seed + speed Ventures"], "existing_investors": [], "key_metrics": {}, "use_of_funds": "Scale AI compliance platform", "notable_details": "Customers include Personio and Blacklane. Covers DORA and NIS2 — critical for financial services compliance.", "source_url": "https://techfundingnews.com/kertos-raises-14m-series-a-automates-european-compliance-ai/", "analyzed_at": "2026-03-20T17:40:14.938507+00:00", "article_title": "Kertos raises €14,000,000", "article_url": "https://techfundingnews.com/kertos-raises-14m-series-a-automates-european-compliance-ai/", "article_source": "Web Research", "published_at": "2025-09"}, {"id": 15, "article_id": 15, "company_name": "Zopa", "company_summary": "UK digital bank (world's first P2P lending platform in 2005) with full banking licence. Has £5.5B in deposits and £3B in loans. Doubled pre-tax profits to £34.2M in 2024.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["lending", "banking-as-a-service"], "customer_segment": "B2C", "stage": "AT1 Capital Raise", "round_type": "Private Equity", "deal_date": "2025-05", "amount_raised_original": "£80,000,000", "amount_raised_eur_millions": 93.6, "amount_raised_usd_millions": 106.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": [], "new_investors": ["20+ institutional investors"], "existing_investors": [], "key_metrics": {"deposits": "£5.5B", "loans": "£3B", "pre_tax_profit": "£34.2M"}, "use_of_funds": "Launch flagship current account product", "notable_details": "AT1 bond listed on London Stock Exchange. Profitable. World's oldest peer-to-peer lender turned digital bank.", "source_url": "https://www.zopa.com/blog/article/zopa-raises-80-million-in-at1-capital-with-lse-bond-listing", "analyzed_at": "2026-03-20T17:40:14.935021+00:00", "article_title": "Zopa raises £80,000,000", "article_url": "https://www.zopa.com/blog/article/zopa-raises-80-million-in-at1-capital-with-lse-bond-listing", "article_source": "Web Research", "published_at": "2025-05"}, {"id": 14, "article_id": 14, "company_name": "Curve", "company_summary": "Digital wallet platform consolidating multiple payment cards into one. Serves 6 million+ customers with cashback, real-time spending insights, and fee-free foreign transactions across UK and EEA.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["payments", "embedded finance"], "customer_segment": "B2C", "stage": "Series C", "round_type": "Venture Capital", "deal_date": "2025-03", "amount_raised_original": "£37,000,000", "amount_raised_eur_millions": 43.3, "amount_raised_usd_millions": 47.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["Hanaco Ventures"], "new_investors": ["Hanaco Ventures", "Fuel Ventures", "IDC", "Outward VC"], "existing_investors": [], "key_metrics": {"customers": "6M+"}, "use_of_funds": "Launch Curve Pay and accelerate growth", "notable_details": "Subsequently acquired by Lloyds Banking Group for ~£120M in late 2025.", "source_url": "https://fintech.global/2025/03/14/digital-wallet-firm-curve-secures-37m-to-accelerate-growth-and-launch-curve-pay/", "analyzed_at": "2026-03-20T17:40:14.931194+00:00", "article_title": "Curve raises £37,000,000", "article_url": "https://fintech.global/2025/03/14/digital-wallet-firm-curve-secures-37m-to-accelerate-growth-and-launch-curve-pay/", "article_source": "Web Research", "published_at": "2025-03"}, {"id": 13, "article_id": 13, "company_name": "Allica Bank", "company_summary": "Digital bank focused exclusively on established SMBs (5–250 employees), offering business banking, savings, commercial mortgages, asset finance, and bridging loans. Serves 30,000+ UK businesses.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["lending", "banking-as-a-service", "SME finance"], "customer_segment": "B2B", "stage": "Series D", "round_type": "Venture Capital", "deal_date": "2026-02", "amount_raised_original": "$155,000,000", "amount_raised_eur_millions": 142.6, "amount_raised_usd_millions": 155.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": 1104.0, "valuation_stated": "$1.2B post-money", "lead_investors": ["Ventura Capital", "TCV"], "new_investors": ["GLG", "Sona AM", "Blue Owl"], "existing_investors": ["TCV"], "key_metrics": {"loans": "£4B+", "deposits": "£5B+", "businesses": "30,000+"}, "use_of_funds": "UK growth, tech investment, and international expansion", "notable_details": "Acquired fintech Kriya in 2025. First UK challenger bank focused purely on established SMBs.", "source_url": "https://www.allica.bank/press-releases/allica-bank-raises-155m-series-d-round-to-accelerate-uk-growth-and-tech-investment-and-commence-international-expansion", "analyzed_at": "2026-03-20T17:40:14.926088+00:00", "article_title": "Allica Bank raises $155,000,000", "article_url": "https://www.allica.bank/press-releases/allica-bank-raises-155m-series-d-round-to-accelerate-uk-growth-and-tech-investment-and-commence-international-expansion", "article_source": "Web Research", "published_at": "2026-02"}, {"id": 12, "article_id": 12, "company_name": "Alan", "company_summary": "Digital health insurance startup serving 1 million+ members and 37,000 businesses across France, Belgium, Spain, and Canada. First new health insurer licensed in France since 1986.", "founding_year": null, "country": "France", "city": "Paris", "technology_focus": ["insurance (insurtech)"], "customer_segment": "B2B2C", "stage": "Series F", "round_type": "Venture Capital", "deal_date": "2026-03", "amount_raised_original": "€100,000,000", "amount_raised_eur_millions": 100.0, "amount_raised_usd_millions": 109.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": 5000.0, "valuation_stated": "€5B post-money", "lead_investors": ["Index Ventures"], "new_investors": ["Greenoaks", "Kaaf", "Belfius"], "existing_investors": ["Index Ventures"], "key_metrics": {"ARR": "€785M", "ARR_growth": "53% YoY", "members": "1M+", "businesses": "37,000"}, "use_of_funds": "International expansion and product development", "notable_details": "Operationally profitable in France. First new health insurer licensed in France since 1986. Tobi Lütke (Shopify founder) and Antoine Griezmann are angel investors.", "source_url": "https://techcrunch.com/2026/03/11/health-insurance-startup-alan-reaches-e5b-valuation/", "analyzed_at": "2026-03-20T17:40:14.922391+00:00", "article_title": "Alan raises €100,000,000", "article_url": "https://techcrunch.com/2026/03/11/health-insurance-startup-alan-reaches-e5b-valuation/", "article_source": "Web Research", "published_at": "2026-03"}, {"id": 11, "article_id": 11, "company_name": "Flowdesk", "company_summary": "Crypto market-making and liquidity services firm (Market-Making as a Service). Works with 150+ crypto exchanges including Binance, Coinbase, and Kraken. Revenues grew 8x in 2024.", "founding_year": null, "country": "France", "city": "Paris", "technology_focus": ["crypto/blockchain"], "customer_segment": "B2B", "stage": "Series C", "round_type": "Growth Equity", "deal_date": "2025-03", "amount_raised_original": "$102,000,000", "amount_raised_eur_millions": 93.8, "amount_raised_usd_millions": 102.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["HV Capital", "BlackRock"], "new_investors": ["BlackRock"], "existing_investors": ["HV Capital", "Eurazeo", "Cathay Innovation", "ISAI"], "key_metrics": {"revenue_growth": "8x in 2024", "exchanges": "150+"}, "use_of_funds": "Scale market-making operations", "notable_details": "Registered as Digital Asset Service Provider with France's AMF. $10.2M was a debt facility from BlackRock.", "source_url": "https://fortune.com/crypto/2025/03/04/market-maker-flowdesk-102-million-in-financing-round-blackrock-hv-capital/", "analyzed_at": "2026-03-20T17:40:14.918621+00:00", "article_title": "Flowdesk raises $102,000,000", "article_url": "https://fortune.com/crypto/2025/03/04/market-maker-flowdesk-102-million-in-financing-round-blackrock-hv-capital/", "article_source": "Web Research", "published_at": "2025-03"}, {"id": 10, "article_id": 10, "company_name": "Fnality", "company_summary": "Operator of next-generation wholesale blockchain payment systems regulated by central banks. Launched the world's first regulated DLT-based wholesale payment system in December 2023.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["crypto/blockchain", "payments"], "customer_segment": "B2B", "stage": "Series C", "round_type": "Venture Capital", "deal_date": "2025-09", "amount_raised_original": "$136,000,000", "amount_raised_eur_millions": 125.0, "amount_raised_usd_millions": 136.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["WisdomTree", "Bank of America"], "new_investors": ["WisdomTree", "Tradeweb"], "existing_investors": ["Citi", "KBC Group", "Temasek", "Banco Santander", "Barclays", "BNP Paribas", "DTCC", "Euroclear", "Goldman Sachs", "ING", "Nasdaq Ventures", "State Street", "UBS"], "key_metrics": {}, "use_of_funds": "Scale wholesale DLT payment systems", "notable_details": "World's first regulated DLT wholesale payment system. Backed by 16 of the world's largest banks.", "source_url": "https://fnality.com/news/fnality-raises-136-million-in-series-c-funding", "analyzed_at": "2026-03-20T17:40:14.914721+00:00", "article_title": "Fnality raises $136,000,000", "article_url": "https://fnality.com/news/fnality-raises-136-million-in-series-c-funding", "article_source": "Web Research", "published_at": "2025-09"}, {"id": 9, "article_id": 9, "company_name": "Solaris", "company_summary": "Europe's largest embedded finance and Banking-as-a-Service platform with a full German banking licence. Offers modular B2B tech stack enabling companies to integrate digital banking, payments, lending, and compliance.", "founding_year": null, "country": "Germany", "city": "Berlin", "technology_focus": ["banking-as-a-service", "embedded finance"], "customer_segment": "B2B", "stage": "Series G", "round_type": "Venture Capital", "deal_date": "2025-02", "amount_raised_original": "€140,000,000", "amount_raised_eur_millions": 140.0, "amount_raised_usd_millions": 152.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Previously $1.6B (2021)", "lead_investors": ["SBI Group"], "new_investors": ["Boerse Stuttgart Group"], "existing_investors": ["SBI Group"], "key_metrics": {}, "use_of_funds": "Product and international expansion", "notable_details": "Holds full German BaFin banking licence. Japanese SBI Group is majority shareholder.", "source_url": "https://newsroom.solarisgroup.com/246558-solaris-secures-eur-140-million-financing-round/", "analyzed_at": "2026-03-20T17:40:14.909901+00:00", "article_title": "Solaris raises €140,000,000", "article_url": "https://newsroom.solarisgroup.com/246558-solaris-secures-eur-140-million-financing-round/", "article_source": "Web Research", "published_at": "2025-02"}, {"id": 8, "article_id": 8, "company_name": "Finom", "company_summary": "Digital financial services platform for SMEs across Europe, providing business banking, invoicing, expense management, payment processing, FX, and AI-powered accounting tools. Serves 125,000+ customers.", "founding_year": null, "country": "Netherlands", "city": "Amsterdam", "technology_focus": ["banking-as-a-service", "SME finance", "payments"], "customer_segment": "B2B", "stage": "Series C", "round_type": "Venture Capital", "deal_date": "2025-06", "amount_raised_original": "€115,000,000", "amount_raised_eur_millions": 115.0, "amount_raised_usd_millions": 125.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Double 2024 Series B valuation", "lead_investors": ["AVP", "Headline Growth"], "new_investors": ["AVP", "Headline Growth"], "existing_investors": ["General Catalyst", "Northzone", "Cogito Capital"], "key_metrics": {"customers": "125,000+"}, "use_of_funds": "European expansion across Germany, France, Italy, Spain, Netherlands", "notable_details": "", "source_url": "https://www.finextra.com/newsarticle/46186/dutch-fintech-finom-secures-115-million-in-series-c-funding", "analyzed_at": "2026-03-20T17:40:14.905513+00:00", "article_title": "Finom raises €115,000,000", "article_url": "https://www.finextra.com/newsarticle/46186/dutch-fintech-finom-secures-115-million-in-series-c-funding", "article_source": "Web Research", "published_at": "2025-06"}, {"id": 7, "article_id": 7, "company_name": "Dojo", "company_summary": "UK payments technology provider offering in-person commerce solutions to 140,000+ businesses. Processes 6–9 million transactions per day and integrates with 450+ EPOS systems.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["payments"], "customer_segment": "B2B", "stage": "Growth", "round_type": "Growth Equity", "deal_date": "2025-05", "amount_raised_original": "$190,000,000", "amount_raised_eur_millions": 175.0, "amount_raised_usd_millions": 190.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["Vitruvian Partners"], "new_investors": ["Vitruvian Partners"], "existing_investors": [], "key_metrics": {"merchants": "140,000+", "daily_transactions": "6-9M", "consumer_cards": "50M/month"}, "use_of_funds": "Growth acceleration", "notable_details": "First ever equity raise in company history. Bootstrapped to significant scale before this round.", "source_url": "https://dojo.tech/resources/dojo-announces-landmark-investment-from-vitruvian-partners/", "analyzed_at": "2026-03-20T17:40:14.900528+00:00", "article_title": "Dojo raises $190,000,000", "article_url": "https://dojo.tech/resources/dojo-announces-landmark-investment-from-vitruvian-partners/", "article_source": "Web Research", "published_at": "2025-05"}, {"id": 6, "article_id": 6, "company_name": "Quantexa", "company_summary": "AI-powered Decision Intelligence platform helping organizations unify siloed data to detect financial crime, manage risk, improve KYC, and fight fraud. Used by global banks, insurers, and government agencies.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["regtech", "data analytics"], "customer_segment": "B2B", "stage": "Series F", "round_type": "Venture Capital", "deal_date": "2025-03", "amount_raised_original": "$175,000,000", "amount_raised_eur_millions": 161.0, "amount_raised_usd_millions": 175.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": 2392.0, "valuation_stated": "$2.6B post-money", "lead_investors": ["Teachers' Venture Growth"], "new_investors": ["Teachers' Venture Growth", "British Patient Capital"], "existing_investors": ["Warburg Pincus", "Dawn Capital", "BNY", "Evolution Equity Partners", "AlbionVC", "HSBC"], "key_metrics": {"ARR": "$100M+"}, "use_of_funds": "Product development and international expansion", "notable_details": "Has surpassed $100M ARR ('Centaur' status). Used by 14 of the top 20 global banks.", "source_url": "https://www.quantexa.com/press/quantexa-completes-usd-175-million-series-f-investment-round-led-by-teachers-venture-growth/", "analyzed_at": "2026-03-20T17:40:14.895984+00:00", "article_title": "Quantexa raises $175,000,000", "article_url": "https://www.quantexa.com/press/quantexa-completes-usd-175-million-series-f-investment-round-led-by-teachers-venture-growth/", "article_source": "Web Research", "published_at": "2025-03"}, {"id": 5, "article_id": 5, "company_name": "Scalable Capital", "company_summary": "Fully vertically integrated digital investment platform offering ETFs, stocks, funds, bonds, crypto, derivatives, and private equity to over 1 million customers across Europe with €30B+ in assets.", "founding_year": null, "country": "Germany", "city": "Munich", "technology_focus": ["wealth management"], "customer_segment": "B2C", "stage": "Growth", "round_type": "Venture Capital", "deal_date": "2025-06", "amount_raised_original": "€155,000,000", "amount_raised_eur_millions": 155.0, "amount_raised_usd_millions": 168.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["Sofina", "Noteus Partners"], "new_investors": ["Sofina", "Noteus Partners"], "existing_investors": ["Balderton Capital", "Tencent", "HV Capital"], "key_metrics": {"customers": "1M+", "AUM": "€30B+"}, "use_of_funds": "Product and market expansion", "notable_details": "Also operates the European Investor Exchange (EIX). Largest round in company history.", "source_url": "https://de.scalable.capital/en/newsroom/en-funding-round-2025", "analyzed_at": "2026-03-20T17:40:14.891792+00:00", "article_title": "Scalable Capital raises €155,000,000", "article_url": "https://de.scalable.capital/en/newsroom/en-funding-round-2025", "article_source": "Web Research", "published_at": "2025-06"}, {"id": 4, "article_id": 4, "company_name": "Flatpay", "company_summary": "Payments platform for small merchants offering flat-rate card terminals and POS systems. Serves 60,000+ merchants across Denmark, Finland, France, Germany, Italy, and the UK.", "founding_year": null, "country": "Denmark", "city": "Copenhagen", "technology_focus": ["payments"], "customer_segment": "B2B", "stage": "Series C", "round_type": "Venture Capital", "deal_date": "2025-11", "amount_raised_original": "€145,000,000", "amount_raised_eur_millions": 145.0, "amount_raised_usd_millions": 157.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": 1500.0, "valuation_stated": "€1.5B post-money", "lead_investors": ["AVP Growth", "Smash Capital"], "new_investors": ["AVP Growth", "Smash Capital"], "existing_investors": ["Dawn Capital"], "key_metrics": {"ARR": "$140M", "ARR_growth": "400% YoY", "merchants": "60,000+"}, "use_of_funds": "European expansion", "notable_details": "Joined European fintech unicorn club. Footballer Mario Götze is an angel investor.", "source_url": "https://techcrunch.com/2025/11/16/fast-growing-danish-startup-flatpay-joins-the-club-of-european-fintech-unicorns-to-track/", "analyzed_at": "2026-03-20T17:40:14.887908+00:00", "article_title": "Flatpay raises €145,000,000", "article_url": "https://techcrunch.com/2025/11/16/fast-growing-danish-startup-flatpay-joins-the-club-of-european-fintech-unicorns-to-track/", "article_source": "Web Research", "published_at": "2025-11"}, {"id": 3, "article_id": 3, "company_name": "FNZ", "company_summary": "End-to-end wealth management platform managing over $2.1 trillion in assets across partnerships with 650+ financial institutions and 12,000 wealth managers worldwide.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["wealth management", "banking-as-a-service"], "customer_segment": "B2B", "stage": "Growth", "round_type": "Growth Equity", "deal_date": "2025-11", "amount_raised_original": "$650,000,000", "amount_raised_eur_millions": 598.0, "amount_raised_usd_millions": 650.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": null, "valuation_stated": "Not disclosed", "lead_investors": ["CDPQ", "Temasek"], "new_investors": [], "existing_investors": ["CDPQ", "Temasek", "CPP Investments", "Generation Investment Management", "Motive Partners"], "key_metrics": {"AUM": "$2.1T", "clients": "650+ financial institutions"}, "use_of_funds": "Accelerate growth strategy", "notable_details": "Manages more assets than any other European wealthtech. Al Gore's Generation IM is a shareholder.", "source_url": "https://fintech.global/2025/11/12/fnz-secures-650m-equity-boost-to-accelerate-its-growth-strategy/", "analyzed_at": "2026-03-20T17:40:14.884370+00:00", "article_title": "FNZ raises $650,000,000", "article_url": "https://fintech.global/2025/11/12/fnz-secures-650m-equity-boost-to-accelerate-its-growth-strategy/", "article_source": "Web Research", "published_at": "2025-11"}, {"id": 2, "article_id": 2, "company_name": "Trade Republic", "company_summary": "Europe's leading mobile-first neobroker offering commission-free trading of stocks, ETFs, bonds, derivatives, and crypto. Holds a full ECB banking license. Serves over 10 million customers with €150 billion in assets under management.", "founding_year": null, "country": "Germany", "city": "Berlin", "technology_focus": ["wealth management", "payments"], "customer_segment": "B2C", "stage": "Secondary", "round_type": "Growth Equity", "deal_date": "2025-12", "amount_raised_original": "€1,200,000,000", "amount_raised_eur_millions": 1200.0, "amount_raised_usd_millions": 1300.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": 12500.0, "valuation_stated": "€12.5B", "lead_investors": ["Founders Fund", "Sequoia"], "new_investors": ["Founders Fund", "Thrive Capital", "Wellington Management", "GIC", "Lingotto Innovation", "Aglaé Ventures"], "existing_investors": ["Sequoia", "Accel", "TCV", "Fidelity Investments", "Khosla Ventures"], "key_metrics": {"customers": "10M+", "AUM": "€150B"}, "use_of_funds": "Secondary share sale", "notable_details": "Europe's most valuable neobroker. Full ECB banking licence. Profitable.", "source_url": "https://www.fintechweekly.com/magazine/articles/trade-republic-valuation-12-5-billion-secondary-share-sale-berlin-fintech", "analyzed_at": "2026-03-20T17:40:14.880630+00:00", "article_title": "Trade Republic raises €1,200,000,000", "article_url": "https://www.fintechweekly.com/magazine/articles/trade-republic-valuation-12-5-billion-secondary-share-sale-berlin-fintech", "article_source": "Web Research", "published_at": "2025-12"}, {"id": 1, "article_id": 1, "company_name": "Revolut", "company_summary": "Europe's largest neobank and financial super-app offering banking, currency exchange, crypto, stock trading, insurance, and business accounts to over 65 million retail customers globally.", "founding_year": null, "country": "United Kingdom", "city": "London", "technology_focus": ["banking-as-a-service", "payments", "wealth management", "crypto/blockchain"], "customer_segment": "B2C", "stage": "Late-stage", "round_type": "Growth Equity", "deal_date": "2025-11", "amount_raised_original": "$2,000,000,000", "amount_raised_eur_millions": 1840.0, "amount_raised_usd_millions": 2000.0, "pre_money_valuation_eur_m": null, "post_money_valuation_eur_m": 69000.0, "valuation_stated": "$75B post-money", "lead_investors": ["Coatue", "Greenoaks"], "new_investors": ["Dragoneer", "Fidelity", "Andreessen Horowitz", "Franklin Templeton", "T. Rowe Price", "Nvidia NVentures"], "existing_investors": ["Coatue", "Greenoaks"], "key_metrics": {"customers": "65M+"}, "use_of_funds": "Growth and secondary liquidity", "notable_details": "Highest-valued European fintech ever. Obtained UK banking licence in 2024.", "source_url": "https://techcrunch.com/2025/11/24/revolut-hits-75b-valuation-in-new-capital-raise/", "analyzed_at": "2026-03-20T17:40:14.876274+00:00", "article_title": "Revolut raises $2,000,000,000", "article_url": "https://techcrunch.com/2025/11/24/revolut-hits-75b-valuation-in-new-capital-raise/", "article_source": "Web Research", "published_at": "2025-11"}];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let sortKey = 'deal_date';
+let sortAsc = false;
+let visibleData = [...ALL_DATA];
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+const fmt = (v, unit='') => v != null ? v.toLocaleString() + unit : '–';
+const fmtM = v => v != null ? (v >= 1000 ? `€${(v/1000).toFixed(1)}B` : `€${v.toFixed(0)}M`) : '–';
+
+function stageClass(stage) {
+  const s = (stage||'').toLowerCase();
+  if (s.includes('seed')) return 'stage-seed';
+  if (s.includes('series a')) return 'stage-a';
+  if (s.includes('series b')) return 'stage-b';
+  if (s.includes('series c') || s.includes('series d') || s.includes('series e')) return 'stage-c';
+  if (s.includes('growth')) return 'stage-growth';
+  if (s.includes('private equity') || s.includes('pe')) return 'stage-pe';
+  return 'stage-other';
+}
+
+function invText(label, arr) {
+  if (!arr || !arr.length) return '';
+  return `<span class="text-slate-500">${label}:</span> ${arr.join(', ')}`;
+}
+
+// ── Populate filter dropdowns ────────────────────────────────────────────────
+function populateFilters() {
+  const stages   = [...new Set(ALL_DATA.map(d => d.stage).filter(Boolean))].sort();
+  const types    = [...new Set(ALL_DATA.map(d => d.round_type).filter(Boolean))].sort();
+  const countries= [...new Set(ALL_DATA.map(d => d.country).filter(Boolean))].sort();
+  const techs    = [...new Set(ALL_DATA.flatMap(d => d.technology_focus || []))].sort();
+
+  const fill = (id, opts) => {
+    const el = document.getElementById(id);
+    opts.forEach(o => { const opt = document.createElement('option'); opt.value = opt.textContent = o; el.appendChild(opt); });
+  };
+  fill('f-stage', stages);
+  fill('f-type', types);
+  fill('f-country', countries);
+  fill('f-tech', techs);
+}
+
+// ── Filtering ────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q       = document.getElementById('search-box').value.toLowerCase();
+  const stage   = document.getElementById('f-stage').value;
+  const type    = document.getElementById('f-type').value;
+  const country = document.getElementById('f-country').value;
+  const tech    = document.getElementById('f-tech').value;
+
+  visibleData = ALL_DATA.filter(d => {
+    if (stage   && d.stage       !== stage)   return false;
+    if (type    && d.round_type  !== type)    return false;
+    if (country && d.country     !== country) return false;
+    if (tech    && !(d.technology_focus||[]).includes(tech)) return false;
+    if (q) {
+      const blob = [
+        d.company_name, d.country, d.city, d.company_summary,
+        ...(d.lead_investors||[]), ...(d.new_investors||[]),
+        ...(d.existing_investors||[]), ...(d.technology_focus||[]),
+      ].join(' ').toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    return true;
+  });
+
+  renderTable();
+  document.getElementById('s-visible').textContent = visibleData.length;
+}
+
+function clearFilters() {
+  ['search-box','f-stage','f-type','f-country','f-tech'].forEach(id => {
+    const el = document.getElementById(id);
+    el.tagName === 'SELECT' ? el.selectedIndex = 0 : (el.value = '');
+  });
+  applyFilters();
+}
+
+// ── Sorting ──────────────────────────────────────────────────────────────────
+function sortTable(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = true; }
+
+  // Update header indicators
+  document.querySelectorAll('th').forEach(th => th.classList.remove('sort-asc','sort-desc'));
+  const headers = ['company_name','country','stage','round_type','amount_raised_eur_millions','post_money_valuation_eur_m','deal_date','x','x2'];
+  const idx = headers.indexOf(key);
+  const ths = document.querySelectorAll('th');
+  if (idx >= 0) ths[idx].classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+
+  visibleData.sort((a,b) => {
+    const av = a[key], bv = b[key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+    return sortAsc ? cmp : -cmp;
+  });
+  renderTable();
+}
+
+// ── Table render ─────────────────────────────────────────────────────────────
+function renderTable() {
+  const tbody = document.getElementById('inv-body');
+  tbody.innerHTML = '';
+
+  if (visibleData.length === 0) {
+    document.getElementById('no-results').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('no-results').classList.add('hidden');
+
+  visibleData.forEach((d, idx) => {
+    const leads = (d.lead_investors||[]).join(', ') || (d.new_investors||[])[0] || '–';
+    const focusTags = (d.technology_focus||[]).slice(0,2).map(f =>
+      `<span class="chip">${f}</span>`).join('');
+
+    const tr = document.createElement('tr');
+    tr.className = 'inv-row border-b border-slate-800 transition-colors';
+    tr.onclick = () => openModal(d);
+    tr.innerHTML = `
+      <td class="px-4 py-3">
+        <div class="font-semibold text-white">${d.company_name||'–'}</div>
+        <div class="text-xs text-slate-500">${d.city||''}</div>
+      </td>
+      <td class="px-4 py-3 text-slate-300">${d.country||'–'}</td>
+      <td class="px-4 py-3">
+        <span class="badge ${stageClass(d.stage)}">${d.stage||'–'}</span>
+      </td>
+      <td class="px-4 py-3 text-slate-400 text-xs">${d.round_type||'–'}</td>
+      <td class="px-4 py-3 text-right font-mono font-semibold text-green-400">${fmtM(d.amount_raised_eur_millions)}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-400">${fmtM(d.post_money_valuation_eur_m)}</td>
+      <td class="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">${d.deal_date||'–'}</td>
+      <td class="px-4 py-3 text-slate-300 text-xs max-w-[180px] truncate" title="${leads}">${leads}</td>
+      <td class="px-4 py-3">${focusTags}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function openModal(d) {
+  const $ = id => document.getElementById(id);
+  $('modal-company').textContent = d.company_name || '–';
+  $('modal-meta').textContent = [d.city, d.country, d.deal_date].filter(Boolean).join(' · ');
+  $('modal-summary').textContent = d.company_summary || 'No summary available.';
+  $('modal-amount').textContent = fmtM(d.amount_raised_eur_millions);
+  $('modal-amount-orig').textContent = d.amount_raised_original || '';
+  $('modal-valuation').textContent = d.valuation_stated || fmtM(d.post_money_valuation_eur_m) || '–';
+  $('modal-stage').textContent = [d.stage, d.round_type].filter(Boolean).join(' · ') || '–';
+  $('modal-location').textContent = [d.city, d.country].filter(Boolean).join(', ') || '–';
+  $('modal-segment').textContent = d.customer_segment || '–';
+  $('modal-founded').textContent = d.founding_year || '–';
+
+  $('modal-lead-inv').innerHTML  = invText('Lead', d.lead_investors);
+  $('modal-new-inv').innerHTML   = invText('New', d.new_investors);
+  $('modal-exist-inv').innerHTML = invText('Existing', d.existing_investors);
+
+  const metrics = d.key_metrics || {};
+  const mEl = $('modal-metrics');
+  mEl.innerHTML = '';
+  if (Object.keys(metrics).length) {
+    Object.entries(metrics).forEach(([k,v]) => {
+      mEl.innerHTML += `<span class="metric-badge"><b>${k}</b>: ${v}</span>`;
+    });
+    $('modal-metrics-section').style.display = '';
+  } else { $('modal-metrics-section').style.display = 'none'; }
+
+  const fEl = $('modal-focus');
+  fEl.innerHTML = (d.technology_focus||[]).map(f => `<span class="chip">${f}</span>`).join('');
+  $('modal-focus-section').style.display = (d.technology_focus||[]).length ? '' : 'none';
+
+  $('modal-funds').textContent = d.use_of_funds || '';
+  $('modal-funds-section').style.display = d.use_of_funds ? '' : 'none';
+
+  $('modal-notable').textContent = d.notable_details || '';
+  $('modal-notable-section').style.display = d.notable_details ? '' : 'none';
+
+  $('modal-source').href = d.source_url || d.article_url || '#';
+  $('modal-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay')) {
+    document.getElementById('modal-overlay').classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+const CHART_COLORS = [
+  '#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444',
+  '#ec4899','#14b8a6','#f97316','#84cc16','#a855f7','#0ea5e9',
+];
+
+function countBy(data, keyFn) {
+  const counts = {};
+  data.forEach(d => {
+    const key = keyFn(d);
+    if (key) counts[key] = (counts[key]||0) + 1;
+  });
+  return Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 10);
+}
+
+function makeChart(canvasId, entries, label) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(e => e[0]),
+      datasets: [{ data: entries.map(e => e[1]), backgroundColor: CHART_COLORS, borderWidth: 0 }],
+    },
+    options: {
+      plugins: {
+        legend: { position:'bottom', labels: { color:'#94a3b8', font:{ size:11 }, boxWidth:12 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}` } },
+      },
+      cutout: '60%',
+    },
+  });
+}
+
+function buildCharts() {
+  makeChart('chart-stage',   countBy(ALL_DATA, d => d.stage),   'Stage');
+  makeChart('chart-country', countBy(ALL_DATA, d => d.country), 'Country');
+  makeChart('chart-tech',    countBy(ALL_DATA, d => (d.technology_focus||[])[0]), 'Tech Focus');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  populateFilters();
+  applyFilters();
+  buildCharts();
+  // Default sort by date descending
+  sortTable('deal_date');
+  sortTable('deal_date');  // toggle back to desc
+  document.getElementById('s-visible').textContent = ALL_DATA.length;
+});
+</script>
+</body>
+</html>
